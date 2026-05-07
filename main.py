@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from urllib.parse import quote
 import httpx
 import os
 
@@ -27,19 +28,29 @@ async def serve_frontend():
 @app.get("/geocode")
 async def geocode(city: str = Query(...)):
     headers = {
-        "User-Agent": "TankpreisApp/1.0 (https://tankpreise-api.onrender.com)",
-        "Accept-Language": "de",
+        "User-Agent": "TankpreisApp/1.0 (kontakt@tankpreis.app)",
+        "Accept-Language": "de,en",
     }
     async with httpx.AsyncClient(timeout=10, headers=headers) as client:
-        for q in [f"{city}, Deutschland", city]:
-            url = f"https://nominatim.openstreetmap.org/search?q={q}&format=json&limit=1&addressdetails=1"
-            r = await client.get(url)
-            if r.status_code == 200:
-                data = r.json()
-                if data:
-                    addr = data[0].get("address", {})
-                    name = addr.get("city") or addr.get("town") or addr.get("village") or data[0]["display_name"].split(",")[0]
-                    return {"name": name, "lat": float(data[0]["lat"]), "lng": float(data[0]["lon"])}
+        for q in [f"{city}, Deutschland", city, f"{city}, Germany"]:
+            encoded = quote(q)
+            url = f"https://nominatim.openstreetmap.org/search?q={encoded}&format=json&limit=3&addressdetails=1&countrycodes=de"
+            try:
+                r = await client.get(url)
+                if r.status_code == 200:
+                    data = r.json()
+                    if data:
+                        addr = data[0].get("address", {})
+                        name = (addr.get("city") or addr.get("town") or
+                                addr.get("village") or addr.get("municipality") or
+                                data[0]["display_name"].split(",")[0])
+                        return {
+                            "name": name,
+                            "lat": float(data[0]["lat"]),
+                            "lng": float(data[0]["lon"])
+                        }
+            except Exception:
+                continue
     raise HTTPException(404, f"Stadt '{city}' nicht gefunden")
 
 
@@ -53,7 +64,8 @@ async def get_stations(lat: float, lng: float, rad: float = 5.0):
     data = r.json()
     if not data.get("ok"):
         raise HTTPException(502, data.get("message", "Tankerkönig Fehler"))
-    stations = [s for s in data.get("stations", []) if s.get("isOpen") and (s.get("e10", 0) > 1 or s.get("diesel", 0) > 1)]
+    stations = [s for s in data.get("stations", [])
+                if s.get("isOpen") and (s.get("e10", 0) > 1 or s.get("diesel", 0) > 1)]
     return {"stations": stations[:10]}
 
 
