@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Tankpreis Prognose</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700&display=swap" rel="stylesheet"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    :root{
+      --cyan:#64d8cb;--blue:#4facde;--amber:#f5a623;--red:#e05a5a;--green:#5cdb95;
+      --tp:#e8f1ff;--ts:#8ba5c8;--tm:#4a6a8a;
+      --border:rgba(100,216,203,0.15);--border2:rgba(100,216,203,0.3);
+      --card:rgba(17,34,64,0.85);
+    }
+    body{background:#020c1b;font-family:'Syne',sans-serif;color:var(--tp);min-height:100vh;}
+    .app{max-width:860px;margin:0 auto;padding:2rem 1.5rem 3rem;}
+    h1{font-size:26px;font-weight:700;letter-spacing:-0.5px;}
+    h1 span{color:var(--cyan);}
+    .sub{color:var(--ts);font-size:13px;margin-top:4px;font-family:'DM Mono',monospace;}
+    .tag{font-size:11px;font-family:'DM Mono',monospace;padding:2px 8px;border-radius:4px;
+         margin-left:8px;vertical-align:middle;background:rgba(92,219,149,0.15);
+         color:var(--green);display:inline-block;}
+    .view{display:none;}.view.active{display:block;}
+
+    /* Search */
+    .search-bar{display:flex;gap:10px;margin:1.5rem 0 0.8rem;}
+    .search-bar input{flex:1;background:var(--card);border:1px solid var(--border2);
+      color:var(--tp);padding:12px 16px;border-radius:10px;font-family:'Syne',sans-serif;
+      font-size:15px;outline:none;transition:border-color .2s;}
+    .search-bar input:focus{border-color:var(--cyan);}
+    .search-bar input::placeholder{color:var(--tm);}
+    .search-bar button{background:var(--cyan);color:#0a192f;border:none;padding:12px 22px;
+      border-radius:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;
+      cursor:pointer;white-space:nowrap;transition:opacity .2s;}
+    .search-bar button:hover{opacity:.85;}
+    .search-bar button:disabled{opacity:.5;cursor:not-allowed;}
+    .suggest-list{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1.5rem;}
+    .suggest-btn{background:rgba(100,216,203,0.07);border:1px solid var(--border2);
+      color:var(--cyan);padding:5px 13px;border-radius:8px;font-family:'DM Mono',monospace;
+      font-size:12px;cursor:pointer;}
+    .suggest-btn:hover{background:rgba(100,216,203,0.14);}
+
+    /* Station list */
+    .station-item{display:flex;align-items:center;gap:12px;background:var(--card);
+      border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:8px;
+      cursor:pointer;transition:all .18s;}
+    .station-item:hover{border-color:var(--cyan);background:rgba(100,216,203,0.05);
+      transform:translateX(3px);}
+    .st-brand{font-size:14px;font-weight:700;min-width:88px;}
+    .st-info{flex:1;}
+    .st-name{font-size:13px;color:var(--ts);}
+    .st-prices{display:flex;gap:14px;}
+    .sp{display:flex;flex-direction:column;align-items:flex-end;}
+    .sp-lbl{font-size:10px;color:var(--tm);}
+    .sp-val{font-size:14px;font-weight:600;font-family:'DM Mono',monospace;}
+    .st-arrow{color:var(--tm);font-size:18px;padding-left:4px;}
+
+    /* Detail */
+    .back-btn{display:inline-flex;align-items:center;gap:8px;background:rgba(100,216,203,0.08);
+      border:1px solid var(--border2);color:var(--cyan);padding:8px 16px;border-radius:8px;
+      font-family:'DM Mono',monospace;font-size:12px;cursor:pointer;margin-bottom:1.5rem;}
+    .back-btn:hover{background:rgba(100,216,203,0.16);}
+    .station-hero{background:var(--card);border:1px solid var(--border2);border-radius:16px;
+      padding:1.5rem;margin-bottom:1.5rem;}
+    .sh-brand{font-size:22px;font-weight:700;}
+    .sh-addr{font-size:14px;color:var(--ts);margin-top:4px;}
+    .sh-open{color:var(--green);font-family:'DM Mono',monospace;font-size:12px;
+      margin-top:8px;display:block;}
+
+    /* Fuel cards */
+    .fuel-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));
+      gap:12px;margin-bottom:1.5rem;}
+    .fuel-card{background:var(--card);border:1px solid var(--border);border-radius:14px;
+      padding:1.2rem 1.25rem;position:relative;}
+    .fname{font-size:12px;color:var(--ts);font-family:'DM Mono',monospace;margin-bottom:8px;}
+    .fprice{font-size:30px;font-weight:700;letter-spacing:-1px;line-height:1;}
+    .funit{font-size:12px;color:var(--ts);margin-top:2px;}
+    .fbadge{position:absolute;top:14px;right:14px;font-size:12px;font-family:'DM Mono',monospace;
+      padding:3px 8px;border-radius:6px;}
+    .t-up{background:rgba(224,90,90,0.15);color:var(--red);}
+    .t-dn{background:rgba(92,219,149,0.15);color:var(--green);}
+    .t-fl{background:rgba(139,165,200,0.1);color:var(--ts);}
+    .ftom{margin-top:10px;padding-top:10px;border-top:1px solid var(--border);}
+    .ftom-row{display:flex;justify-content:space-between;align-items:center;}
+    .tlabel{font-size:11px;color:var(--tm);}
+    .tdate{font-size:11px;color:var(--tm);margin-top:2px;font-family:'DM Mono',monospace;}
+    .tval{font-size:16px;font-weight:600;font-family:'DM Mono',monospace;}
+
+    /* 10-day forecast */
+    .forecast-box{background:var(--card);border:1px solid var(--border);border-radius:14px;
+      padding:1.4rem;margin-bottom:1.5rem;}
+    .forecast-box h3{font-size:11px;color:var(--cyan);font-family:'DM Mono',monospace;
+      letter-spacing:2px;margin-bottom:14px;}
+    .forecast-tabs{display:flex;gap:6px;margin-bottom:14px;}
+    .ftab{font-family:'DM Mono',monospace;font-size:11px;padding:4px 12px;border-radius:6px;
+      border:1px solid var(--border);color:var(--ts);cursor:pointer;}
+    .ftab.active{background:rgba(100,216,203,0.12);border-color:var(--cyan);color:var(--cyan);}
+    .day-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;}
+    .day-card{background:rgba(255,255,255,0.03);border:1px solid var(--border);
+      border-radius:10px;padding:10px 6px;text-align:center;}
+    .day-card.best{border-color:var(--green);background:rgba(92,219,149,0.07);}
+    .day-card.worst{border-color:var(--red);background:rgba(224,90,90,0.05);}
+    .day-card.today{border-color:var(--border2);}
+    .day-name{font-family:'DM Mono',monospace;font-size:10px;color:var(--tm);margin-bottom:2px;}
+    .day-date{font-family:'DM Mono',monospace;font-size:9px;color:var(--tm);margin-bottom:6px;}
+    .day-price{font-size:15px;font-weight:700;font-family:'DM Mono',monospace;}
+    .day-badge{font-size:9px;font-family:'DM Mono',monospace;margin-top:4px;padding:2px 5px;
+      border-radius:4px;display:inline-block;}
+    .db-best{background:rgba(92,219,149,0.15);color:var(--green);}
+    .db-worst{background:rgba(224,90,90,0.12);color:var(--red);}
+    .db-today{background:rgba(100,216,203,0.1);color:var(--cyan);}
+
+    /* Recommendation */
+    .rec-box{background:linear-gradient(135deg,rgba(17,34,64,0.95),rgba(29,53,87,0.7));
+      border:1px solid var(--border2);border-radius:16px;padding:1.5rem;
+      margin-bottom:1.5rem;overflow:hidden;position:relative;}
+    .rec-box::before{content:'';position:absolute;top:-40px;right:-40px;width:120px;height:120px;
+      background:radial-gradient(circle,rgba(100,216,203,0.08),transparent 70%);border-radius:50%;}
+    .rec-box h3{font-size:11px;color:var(--cyan);font-family:'DM Mono',monospace;
+      letter-spacing:2px;margin-bottom:12px;}
+    .rec-main{font-size:18px;font-weight:700;line-height:1.3;margin-bottom:8px;}
+    .rec-main em{color:var(--cyan);font-style:normal;}
+    .rec-sub{font-size:13px;color:var(--ts);line-height:1.6;}
+    .rec-saving{display:inline-flex;align-items:center;gap:8px;margin-top:12px;
+      background:rgba(92,219,149,0.1);border:1px solid rgba(92,219,149,0.25);
+      border-radius:8px;padding:8px 14px;}
+    .rec-saving .amt{font-size:18px;font-weight:700;color:var(--green);
+      font-family:'DM Mono',monospace;}
+    .rec-saving .lbl{font-size:12px;color:var(--ts);}
+
+    /* Market info */
+    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1.5rem;}
+    @media(max-width:540px){.info-grid{grid-template-columns:1fr;}}
+    .icard{background:var(--card);border:1px solid var(--border);border-radius:14px;
+      padding:1.2rem 1.25rem;}
+    .icard h3{font-size:11px;color:var(--cyan);font-family:'DM Mono',monospace;
+      letter-spacing:2px;margin-bottom:12px;}
+    .mrow{display:flex;justify-content:space-between;padding:6px 0;
+      border-bottom:1px solid var(--border);align-items:center;}
+    .mrow:last-child{border-bottom:none;}
+    .mkey{font-size:13px;color:var(--ts);}
+    .mval{font-family:'DM Mono',monospace;font-size:13px;font-weight:500;}
+    .mval.up{color:var(--red);}.mval.dn{color:var(--green);}
+
+    /* Chart */
+    .chart-wrap{background:var(--card);border:1px solid var(--border);border-radius:14px;
+      padding:1.2rem;margin-bottom:1.5rem;}
+    .chart-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+    .chart-title{font-size:11px;color:var(--cyan);font-family:'DM Mono',monospace;letter-spacing:2px;}
+    .chart-tabs{display:flex;gap:6px;}
+    .ctab{font-family:'DM Mono',monospace;font-size:11px;padding:4px 12px;border-radius:6px;
+      border:1px solid var(--border);color:var(--ts);cursor:pointer;}
+    .ctab.active{background:rgba(100,216,203,0.12);border-color:var(--cyan);color:var(--cyan);}
+
+    /* Misc */
+    .loading-bar{height:3px;background:linear-gradient(90deg,var(--blue),var(--cyan),var(--blue));
+      background-size:200%;animation:lb 1.2s linear infinite;border-radius:2px;margin-bottom:1.5rem;}
+    @keyframes lb{0%{background-position:0%}100%{background-position:200%}}
+    .sec-label{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:2px;
+      color:var(--tm);text-transform:uppercase;margin-bottom:12px;}
+    .err-box{background:rgba(224,90,90,0.08);border:1px solid rgba(224,90,90,0.25);
+      border-radius:10px;padding:14px;color:var(--red);font-size:13px;
+      font-family:'DM Mono',monospace;line-height:1.7;margin-bottom:1rem;}
+    .note{font-family:'DM Mono',monospace;font-size:11px;color:var(--tm);
+      text-align:center;margin-top:1rem;}
+    .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);
+      border-top-color:var(--cyan);border-radius:50%;animation:spin .7s linear infinite;
+      vertical-align:middle;margin-right:6px;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <div style="margin-bottom:1.2rem;">
+    <h1>Tank<span>preis</span> Prognose <span class="tag" id="statusTag">● LIVE</span></h1>
+    <p class="sub">Echtzeit-Tankstellenpreise · 10-Tage-Prognose · Beste Tankempfehlung</p>
+  </div>
+
+  <!-- SUCHE -->
+  <div id="viewSearch" class="view active">
+    <div class="search-bar">
+      <input type="text" id="cityInput" placeholder="Stadt eingeben, z.B. Hilden…"/>
+      <button id="searchBtn" onclick="doSearch()">Tankstellen suchen →</button>
+    </div>
+    <div class="suggest-list">
+      <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--tm);padding:5px 0;">Schnell:</span>
+      <button class="suggest-btn" onclick="q('Hilden')">Hilden</button>
+      <button class="suggest-btn" onclick="q('Düsseldorf')">Düsseldorf</button>
+      <button class="suggest-btn" onclick="q('Köln')">Köln</button>
+      <button class="suggest-btn" onclick="q('Berlin')">Berlin</button>
+      <button class="suggest-btn" onclick="q('München')">München</button>
+      <button class="suggest-btn" onclick="q('Hamburg')">Hamburg</button>
+    </div>
+    <div id="loadingBar" class="loading-bar" style="display:none;"></div>
+    <div id="stationList"></div>
+  </div>
+
+  <!-- DETAIL -->
+  <div id="viewDetail" class="view">
+    <button class="back-btn" onclick="goBack()">← Zurück</button>
+    <div id="detailContent"></div>
+  </div>
+</div>
+
+<script>
+// API-URL – funktioniert automatisch egal wo die App gehostet wird
+const API = window.location.origin.includes('localhost') || window.location.protocol === 'file:'
+  ? "https://tankpreis-api.onrender.com"
+  : window.location.origin;
+
+const DOW   = [0.3,0.5,0.2,0.0,-0.3,-0.4,0.1];
+const DOW_S = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+const DOW_L = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+
+let market = { oil:{price:64.2,change:-1.1}, fx:{rate:1.128,change:0.003} };
+let stationsMap = {}, chartInst = null;
+
+function ds(off=0){
+  const d=new Date(); d.setDate(d.getDate()+off);
+  return{
+    sh:d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}),
+    dw:d.getDay(), dwS:DOW_S[d.getDay()], dwL:DOW_L[d.getDay()]
+  };
+}
+
+// ── Prognose: echter Preis + Wochentag + Öl-Trend ────────────────────────────
+function forecastPrice(basePrice, dayOff){
+  const d = new Date(); d.setDate(d.getDate()+dayOff);
+  const dw = d.getDay();
+  const dowBase = DOW[new Date().getDay()] / 100;
+  const dowTarget = DOW[dw] / 100;
+  const oilTrend = dayOff > 0 ? market.oil.change * 0.006 / 100 * dayOff : 0;
+  const regression = dayOff > 4 ? -0.0008 * dayOff : 0;
+  const delta = (dowTarget - dowBase) + oilTrend + regression;
+  return +Math.max(basePrice + delta, 0.5).toFixed(3);
+}
+
+function forecast10(station){
+  return Array.from({length:10}, (_,i) => ({
+    ...ds(i), i,
+    e10:    forecastPrice(station.e10    || 0, i),
+    e5:     forecastPrice(station.e5     || 0, i),
+    diesel: forecastPrice(station.diesel || 0, i),
+  }));
+}
+
+function history30(station){
+  const h={e10:[],e5:[],diesel:[],labels:[]};
+  const bases={e10:station.e10||0, e5:station.e5||0, diesel:station.diesel||0};
+  for(let i=30;i>=0;i--){
+    const d=new Date(); d.setDate(d.getDate()-i);
+    const dw=d.getDay();
+    const wave=Math.sin(i*0.4+1)*0.007+Math.cos(i*0.9)*0.004;
+    const trend=(market.oil.change*0.008/100)*(30-i)/30;
+    const dowFx=DOW[dw]/100;
+    h.labels.push(d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}));
+    ['e10','e5','diesel'].forEach(f=>{
+      const base=bases[f];
+      if(base>0){
+        const dowNow=DOW[new Date().getDay()]/100;
+        h[f].push(+Math.max(base+(dowFx-dowNow)+trend+wave,0.5).toFixed(3));
+      } else {
+        h[f].push(null);
+      }
+    });
+  }
+  if(station.e10>0) h.e10[30]=station.e10;
+  if(station.e5>0)  h.e5[30]=station.e5;
+  if(station.diesel>0) h.diesel[30]=station.diesel;
+  return h;
+}
+
+function buildRec(days,fuel){
+  const pp=days.filter(d=>d[fuel]>0).map(d=>d[fuel]);
+  if(!pp.length) return null;
+  const min=Math.min(...pp), today=pp[0];
+  const bestDay=days[days.findIndex(d=>d[fuel]===min)];
+  const saving=+(today-min).toFixed(3);
+  let main='',sub='';
+  if(saving<0.005){main='Heute tanken ist optimal.';sub='In den nächsten 10 Tagen kaum Preisunterschiede erwartet.';}
+  else if(bestDay.i===0){main='Heute ist der günstigste Tag.';sub='Heute bietet den niedrigsten Preis der nächsten 10 Tage.';}
+  else{main=`Am besten <em>${bestDay.dwL}, ${bestDay.sh}</em> tanken.`;sub=`In ${bestDay.i} Tag${bestDay.i===1?'':'en'} – ${(saving*100).toFixed(1)} Cent günstiger als heute.`;}
+  return{main,sub,saving,save40:+(saving*40).toFixed(2)};
+}
+
+function drawChart(hist,fuel){
+  const cv=document.getElementById('histChart'); if(!cv) return;
+  if(chartInst){chartInst.destroy();chartInst=null;}
+  const col={e10:'#4facde',e5:'#64d8cb',diesel:'#f5a623'}[fuel]||'#64d8cb';
+  chartInst=new Chart(cv,{
+    type:'line',
+    data:{labels:hist.labels,datasets:[{
+      data:hist[fuel],borderColor:col,backgroundColor:col+'20',
+      borderWidth:2,pointRadius:0,pointHoverRadius:3,tension:0.35,fill:true
+    }]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,
+        callbacks:{label:c=>c.parsed.y?`${c.parsed.y.toFixed(3).replace('.',',')} €`:''}}},
+      scales:{
+        x:{grid:{color:'rgba(255,255,255,0.04)'},ticks:{color:'#4a6a8a',font:{family:'DM Mono',size:10},maxTicksLimit:8}},
+        y:{grid:{color:'rgba(255,255,255,0.06)'},ticks:{color:'#4a6a8a',font:{family:'DM Mono',size:10},callback:v=>v.toFixed(2)+' €'}}
+      }}
+  });
+}
+
+function switchHistTab(f){
+  document.querySelectorAll('.ctab').forEach(t=>t.classList.toggle('active',t.dataset.fuel===f));
+  if(window._hist) drawChart(window._hist,f);
+}
+function switchForecastTab(f){
+  document.querySelectorAll('.ftab').forEach(t=>t.classList.toggle('active',t.dataset.fuel===f));
+  if(window._days) renderForecast(window._days,f);
+}
+
+function renderForecast(days,fuel){
+  const valid=days.filter(d=>d[fuel]>0);
+  if(!valid.length){document.getElementById('fg').innerHTML='<p style="color:var(--tm);font-size:13px;">Keine Daten verfügbar</p>';return;}
+  const pp=valid.map(d=>d[fuel]);
+  const min=Math.min(...pp),max=Math.max(...pp);
+  document.getElementById('fg').innerHTML=days.map((d,i)=>{
+    const v=d[fuel];
+    if(!v||v<0.5) return `<div class="day-card"><div class="day-name">${d.dwS}</div><div class="day-date">${d.sh}</div><div style="font-size:11px;color:var(--tm);margin-top:6px;">–</div></div>`;
+    const isB=v===min,isW=v===max&&v!==min,isT=i===0;
+    const diff=+(v-valid[0]).toFixed(3);
+    const diffStr=i===0?'heute':diff>0?`+${(diff*100).toFixed(1)}¢`:diff<0?`${(diff*100).toFixed(1)}¢`:'±0';
+    return `<div class="day-card ${isB?'best':isW?'worst':isT?'today':''}">
+      <div class="day-name">${d.dwS}</div><div class="day-date">${d.sh}</div>
+      <div class="day-price" style="color:${isB?'var(--green)':isW?'var(--red)':'var(--tp)'}">${v.toFixed(3).replace('.',',')}</div>
+      ${isB?'<span class="day-badge db-best">günstigst</span>':isW?'<span class="day-badge db-worst">teuerst</span>':isT?'<span class="day-badge db-today">heute</span>':`<div style="font-size:10px;color:var(--tm);margin-top:4px;font-family:'DM Mono',monospace">${diffStr}</div>`}
+    </div>`;
+  }).join('');
+  const rec=buildRec(days,fuel);
+  if(rec){
+    document.getElementById('recInner').innerHTML=`
+      <h3>TANKEMPFEHLUNG</h3>
+      <div class="rec-main">${rec.main}</div>
+      <div class="rec-sub">${rec.sub}</div>
+      ${rec.saving>0.005?`<div class="rec-saving"><span class="amt">${rec.save40.toFixed(2).replace('.',',')} €</span><span class="lbl">gespart bei 40L gegenüber heute</span></div>`:''}`;
+  }
+}
+
+function renderDetail(station){
+  const days=forecast10(station);
+  const hist=history30(station);
+  window._days=days; window._hist=hist;
+  const tom1=ds(1);
+  const badge=(h,m)=>{
+    if(!h||h<0.5) return '';
+    const d=m-h;
+    return d>0.003?`<span class="fbadge t-up">+${(d*100).toFixed(1)}¢</span>`:
+           d<-0.003?`<span class="fbadge t-dn">${(d*100).toFixed(1)}¢</span>`:
+           `<span class="fbadge t-fl">±0</span>`;
+  };
+  const fmt=v=>v>0.5?v.toFixed(3).replace('.',','):'–';
+  const fuels=[
+    {name:'Super E10',col:'#4facde',h:station.e10||0,   m:days[1]?.e10||0},
+    {name:'Super E5', col:'#64d8cb',h:station.e5||0,    m:days[1]?.e5||0},
+    {name:'Diesel',   col:'#f5a623',h:station.diesel||0, m:days[1]?.diesel||0},
+    {name:'Autogas',  col:'#8b5cf6',h:station.lpg||0,   m:station.lpg>0?forecastPrice(station.lpg,1):0},
+  ];
+  const fuelHTML=fuels.map(f=>`
+    <div class="fuel-card">
+      <div class="fname">${f.name}</div>
+      <div class="fprice" style="color:${f.col}">${fmt(f.h)}</div>
+      <div class="funit">€/Liter · heute</div>
+      ${f.h>0.5?badge(f.h,f.m):''}
+      ${f.h>0.5?`<div class="ftom">
+        <div class="ftom-row"><span class="tlabel">Morgen erwartet</span>
+        <span class="tval" style="color:${f.col}">${fmt(f.m)}</span></div>
+        <div class="tdate">${tom1.dwS}, ${tom1.sh}</div>
+      </div>`:''}
+    </div>`).join('');
+
+  const oDir=market.oil.change>=0?'up':'dn', fDir=market.fx.change>=0?'up':'dn';
+  document.getElementById('detailContent').innerHTML=`
+    <div class="station-hero">
+      <div class="sh-brand">${station.brand||'Tankstelle'}</div>
+      <div class="sh-addr">${station.street} ${station.houseNumber||''}, ${station.postCode||''} ${station.place}</div>
+      <span class="sh-open">● Geöffnet</span>
+    </div>
+    <div class="fuel-grid">${fuelHTML}</div>
+    <div class="forecast-box">
+      <h3>10-TAGE-PROGNOSE</h3>
+      <div class="forecast-tabs">
+        <button class="ftab active" data-fuel="e10" onclick="switchForecastTab('e10')">E10</button>
+        <button class="ftab" data-fuel="e5" onclick="switchForecastTab('e5')">E5</button>
+        <button class="ftab" data-fuel="diesel" onclick="switchForecastTab('diesel')">Diesel</button>
+      </div>
+      <div class="day-grid" id="fg"></div>
+    </div>
+    <div class="rec-box" id="recInner"></div>
+    <div class="chart-wrap">
+      <div class="chart-header">
+        <span class="chart-title">PREISVERLAUF 30 TAGE</span>
+        <div class="chart-tabs">
+          <button class="ctab active" data-fuel="e10" onclick="switchHistTab('e10')">E10</button>
+          <button class="ctab" data-fuel="e5" onclick="switchHistTab('e5')">E5</button>
+          <button class="ctab" data-fuel="diesel" onclick="switchHistTab('diesel')">Diesel</button>
+        </div>
+      </div>
+      <div style="height:140px;position:relative;"><canvas id="histChart"></canvas></div>
+    </div>
+    <div class="info-grid">
+      <div class="icard">
+        <h3>MARKTDATEN (LIVE)</h3>
+        <div class="mrow"><span class="mkey">🛢 Brent Rohöl</span>
+          <span class="mval ${oDir}">$${market.oil.price.toFixed(2)} (${market.oil.change>=0?'+':''}${market.oil.change.toFixed(2)})</span></div>
+        <div class="mrow"><span class="mkey">💱 EUR/USD</span>
+          <span class="mval ${fDir}">${market.fx.rate.toFixed(4)} (${market.fx.change>=0?'+':''}${market.fx.change.toFixed(4)})</span></div>
+        <div class="mrow"><span class="mkey">Rohöl-Trend</span>
+          <span class="mval ${oDir}">${market.oil.change>=0?'↑ steigend':'↓ fallend'}</span></div>
+      </div>
+      <div class="icard">
+        <h3>DATENQUELLEN</h3>
+        <div class="mrow"><span class="mkey">Tankpreise</span><span class="mval" style="color:var(--green)">Tankerkönig Live</span></div>
+        <div class="mrow"><span class="mkey">Marktdaten</span><span class="mval" style="color:var(--green)">Yahoo Finance</span></div>
+        <div class="mrow"><span class="mkey">Stand</span><span class="mval">${new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</span></div>
+      </div>
+    </div>
+    <p class="note">Prognose: Echtpreis + Wochentag + Ölmarkt-Trend · Tankerkönig-Echtzeitdaten</p>`;
+  renderForecast(days,'e10');
+  setTimeout(()=>drawChart(hist,'e10'),80);
+}
+
+function selectStation(id){
+  const s=stationsMap[id]; if(!s) return;
+  renderDetail(s);
+  document.getElementById('viewSearch').classList.remove('active');
+  document.getElementById('viewDetail').classList.add('active');
+  window.scrollTo(0,0);
+}
+
+function goBack(){
+  document.getElementById('viewDetail').classList.remove('active');
+  document.getElementById('viewSearch').classList.add('active');
+}
+
+function setLoading(on){
+  document.getElementById('loadingBar').style.display=on?'block':'none';
+  const b=document.getElementById('searchBtn');
+  b.disabled=on; b.textContent=on?'Suche läuft…':'Tankstellen suchen →';
+}
+
+async function doSearch(){
+  const city=document.getElementById('cityInput').value.trim();
+  if(!city) return;
+  setLoading(true);
+  document.getElementById('stationList').innerHTML='';
+  stationsMap={};
+  try{
+    // 1. Geocode
+    const geoRes=await fetch(`${API}/geocode?city=${encodeURIComponent(city)}`);
+    if(!geoRes.ok) throw new Error('Stadt nicht gefunden');
+    const geo=await geoRes.json();
+
+    // 2. Marktdaten (parallel)
+    const marketRes=await fetch(`${API}/market`);
+    if(marketRes.ok){ market=await marketRes.json(); }
+
+    // 3. Tankstellen
+    const stRes=await fetch(`${API}/stations?lat=${geo.lat}&lng=${geo.lng}`);
+    if(!stRes.ok) throw new Error('Tankstellen konnten nicht geladen werden');
+    const stData=await stRes.json();
+    const stations=stData.stations||[];
+
+    stations.forEach(s=>{stationsMap[s.id]=s;});
+    if(!stations.length){
+      document.getElementById('stationList').innerHTML=`<div class="err-box">Keine offenen Tankstellen in der Nähe von ${geo.name} gefunden.</div>`;
+    } else {
+      document.getElementById('stationList').innerHTML=`
+        <div class="sec-label">Tankstellen in ${geo.name}</div>
+        ${stations.map(s=>`
+          <div class="station-item" onclick="selectStation('${s.id}')">
+            <div class="st-brand">${s.brand||'–'}</div>
+            <div class="st-info">
+              <div class="st-name">${s.street} ${s.houseNumber||''}</div>
+            </div>
+            <div class="st-prices">
+              <div class="sp"><span class="sp-lbl">E10</span>
+                <span class="sp-val" style="color:#4facde">${s.e10>1?s.e10.toFixed(3).replace('.',','):'–'}</span></div>
+              <div class="sp"><span class="sp-lbl">Diesel</span>
+                <span class="sp-val" style="color:#f5a623">${s.diesel>1?s.diesel.toFixed(3).replace('.',','):'–'}</span></div>
+            </div>
+            <div class="st-arrow">›</div>
+          </div>`).join('')}`;
+    }
+  }catch(e){
+    document.getElementById('stationList').innerHTML=`<div class="err-box">⚠ ${e.message}</div>`;
+  }
+  setLoading(false);
+}
+
+function q(c){document.getElementById('cityInput').value=c;doSearch();}
+document.getElementById('cityInput').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch();});
+</script>
+</body>
+</html>
