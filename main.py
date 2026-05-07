@@ -16,7 +16,6 @@ app.add_middleware(
 TANKERKOENIG_KEY = os.getenv("TK_API_KEY", "00000000-0000-0000-0000-000000000002")
 TK_BASE = "https://creativecommons.tankerkoenig.de/json"
 
-# Deutsche Städte mit Koordinaten – kein externes Geocoding nötig
 CITIES = {
     "hilden": (51.1674, 6.9307),
     "düsseldorf": (51.2217, 6.7762),
@@ -95,6 +94,7 @@ CITIES = {
     "trier": (49.7596, 6.6441),
     "kaiserslautern": (49.4432, 7.7690),
     "schwerin": (53.6355, 11.4012),
+    "hilden": (51.1674, 6.9307),
 }
 
 
@@ -111,7 +111,7 @@ async def geocode(city: str = Query(...)):
     if key in CITIES:
         lat, lng = CITIES[key]
         return {"name": city.strip().title(), "lat": lat, "lng": lng}
-    raise HTTPException(404, f"Stadt '{city}' nicht gefunden. Verfügbare Städte: {', '.join(sorted(CITIES.keys()))}")
+    raise HTTPException(404, f"Stadt '{city}' nicht gefunden.")
 
 
 @app.get("/stations")
@@ -124,8 +124,23 @@ async def get_stations(lat: float, lng: float, rad: float = 10.0):
     data = r.json()
     if not data.get("ok"):
         raise HTTPException(502, data.get("message", "Tankerkönig Fehler"))
-    stations = [s for s in data.get("stations", [])
-                if s.get("isOpen") and (s.get("e10", 0) > 1 or s.get("diesel", 0) > 1)]
+
+    stations = []
+    for s in data.get("stations", []):
+        # Preise bereinigen – nur gültige Preise (>1.00 €) behalten
+        e10    = s.get("e10")    if s.get("e10",    0) > 1.0 else None
+        e5     = s.get("e5")     if s.get("e5",     0) > 1.0 else None
+        diesel = s.get("diesel") if s.get("diesel", 0) > 1.0 else None
+        lpg    = s.get("lpg")    if s.get("lpg",    0) > 0.5 else None
+
+        # Station aufnehmen wenn mindestens ein Preis vorhanden
+        if any([e10, e5, diesel]):
+            s["e10"]    = e10
+            s["e5"]     = e5
+            s["diesel"] = diesel
+            s["lpg"]    = lpg
+            stations.append(s)
+
     return {"stations": stations[:10]}
 
 
